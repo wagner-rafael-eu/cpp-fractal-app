@@ -1,0 +1,10 @@
+^C:\_AI\002\CPP-FRACTAL-APP\BUILD\CMAKEFILES\95C60D742394D7D106CCC0C7878E7F31\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/_AI/002/cpp-fractal-app -BC:/_AI/002/cpp-fractal-app/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/_AI/002/cpp-fractal-app/build/FractalApp.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

@@ -1,0 +1,12 @@
+PWD: C:\_AI\002\cpp-fractal-app
+--- git status porcelain ---
+fatal: not a git repository (or any of the parent directories): .git
+--- branch ---
+fatal: not a git repository (or any of the parent directories): .git
+--- last commit ---
+fatal: not a git repository (or any of the parent directories): .git
+--- remotes ---
+fatal: not a git repository (or any of the parent directories): .git
+--- push attempt ---
+fatal: not a git repository (or any of the parent directories): .git
+PUSH_FAILED

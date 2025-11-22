@@ -1,0 +1,4 @@
+PWD: C:\_AI\002\cpp-fractal-app
+--- git init ---
+Initialized empty Git repository in C:/_AI/002/cpp-fractal-app/.git/
+--- git add ---

@@ -1,0 +1,3 @@
+C:/_AI/002/cpp-fractal-app/build/_deps/sfml-subbuild/CMakeFiles/sfml-populate.dir
+C:/_AI/002/cpp-fractal-app/build/_deps/sfml-subbuild/CMakeFiles/ALL_BUILD.dir
+C:/_AI/002/cpp-fractal-app/build/_deps/sfml-subbuild/CMakeFiles/ZERO_CHECK.dir

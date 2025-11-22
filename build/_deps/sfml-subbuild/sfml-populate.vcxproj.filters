@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\2c67fc9d237037f1a1f963d9c1ccb08c\sfml-populate-mkdir.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\2c67fc9d237037f1a1f963d9c1ccb08c\sfml-populate-download.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\2c67fc9d237037f1a1f963d9c1ccb08c\sfml-populate-update.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\2c67fc9d237037f1a1f963d9c1ccb08c\sfml-populate-patch.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\2c67fc9d237037f1a1f963d9c1ccb08c\sfml-populate-configure.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\2c67fc9d237037f1a1f963d9c1ccb08c\sfml-populate-build.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\2c67fc9d237037f1a1f963d9c1ccb08c\sfml-populate-install.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\2c67fc9d237037f1a1f963d9c1ccb08c\sfml-populate-test.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\e37833b8d06480e43e5089d66c86ddbf\sfml-populate-complete.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\786545f66cf6424418c72ae3cc60db54\sfml-populate.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\_AI\002\cpp-fractal-app\build\_deps\sfml-subbuild\CMakeFiles\sfml-populate" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{42AD683B-4D48-320C-B3C2-BAFC58AA264B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
