@@ -9,6 +9,8 @@ Interactive C++ fractal viewer built with SFML. Supports multiple fractal types 
 - Overlay showing zoom level and center coordinates
 - Persistent settings saved to `C:/_AI/002/fractal_settings.txt`
 
+**Behavior note:** switching fractal modes (keys `1`–`5`) now resets the view to the initial/default zoom and center.
+
 ## Prerequisites
 
 - Visual Studio 2022 (or later) with C++ development tools
@@ -37,6 +39,10 @@ cmake --build . --config Release --target FractalApp
 
 Run the app and use the on-screen overlay and controls to interact.
 
+When launched detached, runtime output is written to `C:/_AI/002/fractal_run_out.log` and `C:/_AI/002/fractal_run_err.log`.
+
+To observe input interactions (clicks/recents) when running the app detached, check `C:/_AI/002/clicks.log`.
+
 ## Controls
 
 - 1..5 : Switch fractal modes
@@ -49,6 +55,15 @@ Run the app and use the on-screen overlay and controls to interact.
 
 - Debug images and logs are written to `C:/_AI/002` (e.g. `debug_fractal_*.png`, `clicks.log`).
 - The repo currently contains build artifacts; consider cleaning `build/` from the repository (a `.gitignore` is present).
+
+## Pushing / Metadata
+
+I can set repository description and topics for you once a GitHub token is available in the environment. Locally you can run:
+
+```powershell
+gh repo edit <owner>/<repo> --description "Interactive C++ SFML fractal viewer (Mandelbrot, Sierpinski, Koch, Menger, Dragon)"
+gh repo edit <owner>/<repo> --add-topic c++ sfml fractal mandelbrot graphics
+```
 
 ## License
 
