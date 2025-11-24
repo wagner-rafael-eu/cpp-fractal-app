@@ -1,0 +1,21 @@
+# Ignore build artifacts
+build/
+_deps/
+/*/Release/
+
+# Ignore generated executables and logs
+*.exe
+*.dll
+*.log
+
+# Ignore local debug files created by the automation
+git_push_try.txt
+git_push_debug*.txt
+last_commit.txt
+remotes.txt
+
+# Visual Studio temporary files
+*.suo
+*.user
+*.vcxproj.user
+.vs/
