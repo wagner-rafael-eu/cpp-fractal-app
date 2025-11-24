@@ -6,8 +6,41 @@
 #include <string>
 #include <iomanip>
 #include <iostream>
+#include <vector>
+#include <chrono>
 
 constexpr double PI = 3.14159265358979323846;
+
+// Performance stats per-fractal
+struct PerfStats {
+    uint64_t frames = 0;
+    double totalMs = 0.0;
+    double minMs = 1e9;
+    double maxMs = 0.0;
+    void add(double ms) {
+        frames++;
+        totalMs += ms;
+        if (ms < minMs) minMs = ms;
+        if (ms > maxMs) maxMs = ms;
+    }
+    double avg() const { return frames ? (totalMs / static_cast<double>(frames)) : 0.0; }
+};
+
+// Interval stats for periodic summaries
+struct IntervalStats {
+    uint64_t frames = 0;
+    double totalMs = 0.0;
+    double minMs = 1e9;
+    double maxMs = 0.0;
+    void add(double ms) {
+        frames++;
+        totalMs += ms;
+        if (ms < minMs) minMs = ms;
+        if (ms > maxMs) maxMs = ms;
+    }
+    void reset() { frames = 0; totalMs = 0.0; minMs = 1e9; maxMs = 0.0; }
+    double avg() const { return frames ? (totalMs / static_cast<double>(frames)) : 0.0; }
+};
 
 // Function to calculate Mandelbrot set value for a point
 int calculateMandelbrot(double x, double y, int maxIter) {
@@ -401,6 +434,30 @@ int main() {
         overlay.setOutlineThickness(1.0f);
         overlay.setPosition(8.f, 8.f);
     }
+    // Timing instrumentation
+    std::vector<PerfStats> perfStats(6); // index by fractal id (1..5)
+    double lastRenderMs = 0.0;
+    double lastFrameMs = 0.0;
+    const std::string frameLogPath = "C:/_AI/002/frame_times.csv";
+    const std::string summaryLogPath = "C:/_AI/002/frame_summary.csv";
+    std::vector<IntervalStats> intervalStats(6);
+    sf::Clock summaryClock;
+    // Ensure CSV header exists
+    try {
+        std::ifstream test(frameLogPath);
+        if (!test.good()) {
+            std::ofstream hdr(frameLogPath, std::ios::trunc);
+            if (hdr.is_open()) hdr << "ts,fractal,render_ms,update_ms,display_ms,frame_ms\n";
+        }
+    } catch (...) {}
+    // Ensure summary CSV header exists
+    try {
+        std::ifstream tst(summaryLogPath);
+        if (!tst.good()) {
+            std::ofstream sh(summaryLogPath, std::ios::trunc);
+            if (sh.is_open()) sh << "ts,window_s,fractal,frames,min_ms,max_ms,avg_ms,total_ms\n";
+        }
+    } catch (...) {}
     // Animated zoom state: interpolate bounds over time for smooth zooming
     struct ZoomAnim {
         bool active = false;
@@ -656,6 +713,20 @@ int main() {
             else if (currentFractal == MENGER) name = "Menger";
             else if (currentFractal == DRAGON) name = "Dragon";
             oss << "Fractal: " << name;
+            // Append timing stats when available
+            try {
+                std::ostringstream tss;
+                tss << std::fixed << std::setprecision(2);
+                double avg = 0.0, mn = 0.0, mx = 0.0;
+                if (currentFractal >= 1 && currentFractal < static_cast<int>(perfStats.size())) {
+                    avg = perfStats[currentFractal].avg();
+                    mn = perfStats[currentFractal].minMs < 1e9 ? perfStats[currentFractal].minMs : 0.0;
+                    mx = perfStats[currentFractal].maxMs;
+                }
+                tss << "\nRender(ms): last=" << lastRenderMs << " avg=" << avg << " min=" << mn << " max=" << mx;
+                tss << "\nFrame(ms): last=" << lastFrameMs;
+                oss << tss.str();
+            } catch (...) {}
             overlay.setString(oss.str());
         }
 
@@ -692,11 +763,93 @@ int main() {
                 zoomAnim.active = false;
             }
         }
+        
+        // Frame timing: measure render/update/display times. We ensure a single
+        // full-frame render+update+display per loop by tracking whether we
+        // already displayed this iteration.
+        static bool frameDisplayed = false;
+        if (!zoomAnim.active) {
+            // no animation active -> do a measured full-frame render/display
+            auto frameStart = std::chrono::high_resolution_clock::now();
+            auto rstart = frameStart;
+            renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
+            auto rend = std::chrono::high_resolution_clock::now();
+            texture.update(image);
+            auto rupdate = std::chrono::high_resolution_clock::now();
 
-        window.clear();
-        window.draw(sprite);
-        if (fontLoaded) window.draw(overlay);
-        window.display();
+            window.clear();
+            window.draw(sprite);
+            if (fontLoaded) window.draw(overlay);
+            window.display();
+
+            auto fend = std::chrono::high_resolution_clock::now();
+
+            double renderMs = std::chrono::duration<double, std::milli>(rend - rstart).count();
+            double updateMs = std::chrono::duration<double, std::milli>(rupdate - rend).count();
+            double displayMs = std::chrono::duration<double, std::milli>(fend - rupdate).count();
+            double frameMs = std::chrono::duration<double, std::milli>(fend - frameStart).count();
+
+            lastRenderMs = renderMs; lastFrameMs = frameMs;
+            if (currentFractal >= 1 && currentFractal < static_cast<int>(perfStats.size())) perfStats[currentFractal].add(renderMs);
+
+            // update interval stats for per-2s summary
+            if (currentFractal >= 1 && currentFractal < static_cast<int>(intervalStats.size())) {
+                intervalStats[currentFractal].add(renderMs);
+            }
+
+            // append CSV log
+            try {
+                std::ofstream out(frameLogPath, std::ios::app);
+                if (out.is_open()) {
+                    auto ts = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+                    out << ts << "," << currentFractal << "," << renderMs << "," << updateMs << "," << displayMs << "," << frameMs << "\n";
+                    out.close();
+                }
+            } catch (...) {}
+
+            // occasional console report every 60 frames
+            if (perfStats[currentFractal].frames > 0 && perfStats[currentFractal].frames % 60 == 0) {
+                const PerfStats &ps = perfStats[currentFractal];
+                std::cout << "Perf fractal=" << currentFractal << " frames=" << ps.frames
+                          << " avg_render_ms=" << ps.avg()
+                          << " min=" << ps.minMs << " max=" << ps.maxMs << " last_frame_ms=" << frameMs << "\n";
+            }
+
+            frameDisplayed = true;
+        }
+
+        // Periodic summary: every 2 seconds, write aggregated summary for each fractal
+        if (summaryClock.getElapsedTime().asSeconds() >= 2.0f) {
+            try {
+                std::ofstream out(summaryLogPath, std::ios::app);
+                if (out.is_open()) {
+                    auto ts = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+                    double windowS = summaryClock.getElapsedTime().asSeconds();
+                    for (int f = 1; f <= 5; ++f) {
+                        const IntervalStats &is = intervalStats[f];
+                        if (is.frames > 0) {
+                            out << ts << "," << windowS << "," << f << "," << is.frames << "," << is.minMs
+                                << "," << is.maxMs << "," << is.avg() << "," << is.totalMs << "\n";
+                        } else {
+                            // still write zero-frames row so timeline remains continuous
+                            out << ts << "," << windowS << "," << f << ",0,0,0,0,0\n";
+                        }
+                    }
+                    out.close();
+                }
+            } catch (...) {}
+            // reset interval stats and clock
+            for (auto &s : intervalStats) s.reset();
+            summaryClock.restart();
+        }
+
+        // only draw/display here if we didn't already in the timed block above
+        if (!frameDisplayed) {
+            window.clear();
+            window.draw(sprite);
+            if (fontLoaded) window.draw(overlay);
+            window.display();
+        }
 
         // Flush debounced save if enough idle time passed
         if (viewDirty && saveClock.getElapsedTime().asSeconds() >= saveDebounceSec) {
@@ -706,6 +859,8 @@ int main() {
             saveSettings(settingsPath, centerReal, centerImag, width, currentFractal);
             viewDirty = false;
         }
+        // Reset per-loop display flag
+        frameDisplayed = false;
     }
     
     return 0;
