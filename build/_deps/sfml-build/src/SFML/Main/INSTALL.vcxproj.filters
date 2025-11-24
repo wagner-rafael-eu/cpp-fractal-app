@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\_AI\002\cpp-fractal-app\build\CMakeFiles\b9cb10b0d1e2ec6744c23b674e0d892f\INSTALL_force.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{1750A2C0-0949-366C-8AAF-3B95537ED73D}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

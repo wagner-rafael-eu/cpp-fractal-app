@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/_AI/002/cpp-fractal-app/build/_deps/sfml-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
