@@ -8,6 +8,11 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <atomic>
 
 constexpr double PI = 3.14159265358979323846;
 
@@ -355,7 +360,7 @@ bool saveSettings(const std::string &path, double centerReal, double centerImag,
 int main() {
     const int WIDTH = 640;
     const int HEIGHT = 480;
-    const int MAX_ITER = 100;
+    const int MAX_ITER = 50; // lowered from 100 to improve frame times
     
     // Create window
     sf::RenderWindow window(sf::VideoMode(WIDTH, HEIGHT), "Mandelbrot Fractal");
@@ -458,6 +463,35 @@ int main() {
             if (sh.is_open()) sh << "ts,window_s,fractal,frames,min_ms,max_ms,avg_ms,total_ms\n";
         }
     } catch (...) {}
+    // Logging queue + background writer
+    struct LogEntry { bool summary; std::string line; };
+    std::mutex logMutex;
+    std::condition_variable logCv;
+    std::queue<LogEntry> logQueue;
+    bool logThreadStop = false;
+    std::thread writerThread([&]() {
+        std::ofstream frameOut(frameLogPath, std::ios::app);
+        std::ofstream sumOut(summaryLogPath, std::ios::app);
+        while (true) {
+            std::unique_lock<std::mutex> lk(logMutex);
+            logCv.wait(lk, [&]{ return !logQueue.empty() || logThreadStop; });
+            while (!logQueue.empty()) {
+                LogEntry e = std::move(logQueue.front()); logQueue.pop();
+                lk.unlock();
+                try {
+                    if (e.summary) {
+                        if (sumOut.is_open()) { sumOut << e.line; }
+                    } else {
+                        if (frameOut.is_open()) { frameOut << e.line; }
+                    }
+                } catch (...) {}
+                lk.lock();
+            }
+            if (logThreadStop && logQueue.empty()) break;
+        }
+        try { if (frameOut.is_open()) frameOut.flush(); } catch(...){}
+        try { if (sumOut.is_open()) sumOut.flush(); } catch(...){}
+    });
     // Animated zoom state: interpolate bounds over time for smooth zooming
     struct ZoomAnim {
         bool active = false;
@@ -474,6 +508,51 @@ int main() {
         }
         float progress() const { return std::min(1.0f, clock.getElapsedTime().asSeconds() / duration); }
     } zoomAnim;
+
+    // Precache: compute N frames ahead in background for zoom animations
+    struct Precache {
+        std::mutex m;
+        std::thread worker;
+        std::atomic<bool> active{false};
+        std::atomic<bool> cancel{false};
+        int frames = 0;
+        std::vector<sf::Image> images; // length == frames, may be empty until ready
+        std::vector<std::atomic<bool>> ready; // per-image ready flags
+
+        void start(int nFrames) {
+            std::lock_guard<std::mutex> lk(m);
+            cancel = false;
+            if (active && worker.joinable()) {
+                // request cancel and join previous
+                cancel = true;
+                worker.join();
+            }
+            frames = nFrames;
+            images.assign(frames, sf::Image());
+            ready.assign(frames, false);
+            active = true;
+        }
+
+        void stop() {
+            std::lock_guard<std::mutex> lk(m);
+            if (active) {
+                cancel = true;
+                if (worker.joinable()) worker.join();
+                active = false;
+            }
+        }
+
+        bool isReadyIndex(int idx) {
+            if (idx < 0 || idx >= frames) return false;
+            return ready[idx];
+        }
+
+        // get pointer to cached image at index (caller must not modify it)
+        const sf::Image* getImage(int idx) {
+            if (!isReadyIndex(idx)) return nullptr;
+            return &images[idx];
+        }
+    } precache;
     
     // Main loop
     while (window.isOpen()) {
@@ -558,6 +637,42 @@ int main() {
                     zoomAnim.start(realMin, realMax, imagMin, imagMax,
                                    trgRealMin, trgRealMax, trgImagMin, trgImagMax,
                                    dur);
+                    // Kick off precache of intermediate frames (15 ahead)
+                    const int PRECACHE_FRAMES = 15;
+                    precache.start(PRECACHE_FRAMES);
+                    // Spawn worker to fill precache images
+                    precache.worker = std::thread([=, &precache, &currentFractal, &MAX_ITER]() mutable {
+                        // compute per-frame bounds and render into images
+                        double srm = realMin, srx = realMax, sim = imagMin, six = imagMax;
+                        double trm = trgRealMin, trx = trgRealMax, tim = trgImagMin, tix = trgImagMax;
+                        double startW = srx - srm;
+                        double targetW = trx - trm;
+                        for (int i = 0; i < PRECACHE_FRAMES && !precache.cancel; ++i) {
+                            float p = static_cast<float>(i + 1) / static_cast<float>(PRECACHE_FRAMES);
+                            double curW = 0.0;
+                            if (startW > 0.0 && targetW > 0.0) curW = startW * std::pow(targetW / startW, p);
+                            else curW = srx + (trx - srx) * p;
+                            double startCenterR = (srm + srx) / 2.0;
+                            double targetCenterR = (trm + trx) / 2.0;
+                            double centerR = startCenterR + (targetCenterR - startCenterR) * p;
+                            double startCenterI = (sim + six) / 2.0;
+                            double targetCenterI = (tim + tix) / 2.0;
+                            double centerI = startCenterI + (targetCenterI - startCenterI) * p;
+                            double halfW = curW / 2.0;
+                            double halfH = curW * (static_cast<double>(HEIGHT) / static_cast<double>(WIDTH)) / 2.0;
+                            double rmin = centerR - halfW; double rmax = centerR + halfW;
+                            double imin = centerI - halfH; double imax = centerI + halfH;
+                            sf::Image img;
+                            img.create(WIDTH, HEIGHT, sf::Color::Black);
+                            renderCurrent(currentFractal, img, WIDTH, HEIGHT, rmin, rmax, imin, imax, MAX_ITER);
+                            {
+                                std::lock_guard<std::mutex> lk(precache.m);
+                                if (i < (int)precache.images.size()) precache.images[i] = std::move(img);
+                                precache.ready[i] = true;
+                            }
+                        }
+                        precache.active = false;
+                    });
                     // mark dirty so we persist after animation completes
                     viewDirty = true; saveClock.restart();
                 }
@@ -612,6 +727,8 @@ int main() {
                     realMax = INIT_REAL_MAX;
                     imagMin = INIT_IMAG_MIN;
                     imagMax = INIT_IMAG_MAX;
+                    // cancel any precache when switching fractal
+                    precache.stop();
                     renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
                     texture.update(image);
                     viewDirty = true; saveClock.restart();
@@ -623,6 +740,7 @@ int main() {
                     realMax = INIT_REAL_MAX;
                     imagMin = INIT_IMAG_MIN;
                     imagMax = INIT_IMAG_MAX;
+                    precache.stop();
                     renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
                     texture.update(image);
                     viewDirty = true; saveClock.restart();
@@ -634,6 +752,7 @@ int main() {
                     realMax = INIT_REAL_MAX;
                     imagMin = INIT_IMAG_MIN;
                     imagMax = INIT_IMAG_MAX;
+                    precache.stop();
                     renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
                     texture.update(image);
                     viewDirty = true; saveClock.restart();
@@ -756,8 +875,24 @@ int main() {
             imagMin = centerI - halfH;
             imagMax = centerI + halfH;
 
-            renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
-            texture.update(image);
+            // During an animated zoom try to use precached frame if available
+            if (zoomAnim.active) {
+                float p = zoomAnim.progress();
+                int idx = static_cast<int>(std::floor(p * precache.frames));
+                if (idx < 0) idx = 0;
+                if (idx >= precache.frames) idx = precache.frames - 1;
+                const sf::Image *pre = nullptr;
+                if (precache.active && precache.isReadyIndex(idx)) pre = precache.getImage(idx);
+                if (pre) {
+                    texture.update(*pre);
+                } else {
+                    renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
+                    texture.update(image);
+                }
+            } else {
+                renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
+                texture.update(image);
+            }
 
             if (p >= 1.0f) {
                 zoomAnim.active = false;
@@ -797,14 +932,16 @@ int main() {
                 intervalStats[currentFractal].add(renderMs);
             }
 
-            // append CSV log
+            // enqueue CSV log line for background writer
             try {
-                std::ofstream out(frameLogPath, std::ios::app);
-                if (out.is_open()) {
-                    auto ts = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-                    out << ts << "," << currentFractal << "," << renderMs << "," << updateMs << "," << displayMs << "," << frameMs << "\n";
-                    out.close();
+                auto ts = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+                std::ostringstream l;
+                l << ts << "," << currentFractal << "," << renderMs << "," << updateMs << "," << displayMs << "," << frameMs << "\n";
+                {
+                    std::lock_guard<std::mutex> lk(logMutex);
+                    logQueue.push(LogEntry{false, l.str()});
                 }
+                logCv.notify_one();
             } catch (...) {}
 
             // occasional console report every 60 frames
@@ -821,21 +958,22 @@ int main() {
         // Periodic summary: every 2 seconds, write aggregated summary for each fractal
         if (summaryClock.getElapsedTime().asSeconds() >= 2.0f) {
             try {
-                std::ofstream out(summaryLogPath, std::ios::app);
-                if (out.is_open()) {
-                    auto ts = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-                    double windowS = summaryClock.getElapsedTime().asSeconds();
-                    for (int f = 1; f <= 5; ++f) {
-                        const IntervalStats &is = intervalStats[f];
-                        if (is.frames > 0) {
-                            out << ts << "," << windowS << "," << f << "," << is.frames << "," << is.minMs
-                                << "," << is.maxMs << "," << is.avg() << "," << is.totalMs << "\n";
-                        } else {
-                            // still write zero-frames row so timeline remains continuous
-                            out << ts << "," << windowS << "," << f << ",0,0,0,0,0\n";
-                        }
+                auto ts = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+                double windowS = summaryClock.getElapsedTime().asSeconds();
+                for (int f = 1; f <= 5; ++f) {
+                    const IntervalStats &is = intervalStats[f];
+                    std::ostringstream l;
+                    if (is.frames > 0) {
+                        l << ts << "," << windowS << "," << f << "," << is.frames << "," << is.minMs
+                          << "," << is.maxMs << "," << is.avg() << "," << is.totalMs << "\n";
+                    } else {
+                        l << ts << "," << windowS << "," << f << ",0,0,0,0,0\n";
                     }
-                    out.close();
+                    {
+                        std::lock_guard<std::mutex> lk(logMutex);
+                        logQueue.push(LogEntry{true, l.str()});
+                    }
+                    logCv.notify_one();
                 }
             } catch (...) {}
             // reset interval stats and clock
@@ -862,6 +1000,17 @@ int main() {
         // Reset per-loop display flag
         frameDisplayed = false;
     }
+    // Shutdown background writer thread cleanly
+    try {
+        {
+            std::lock_guard<std::mutex> lk(logMutex);
+            logThreadStop = true;
+        }
+        logCv.notify_one();
+        if (writerThread.joinable()) writerThread.join();
+    } catch (...) {}
+    // Stop precache worker
+    try { precache.stop(); } catch(...) {}
     
     return 0;
 }
