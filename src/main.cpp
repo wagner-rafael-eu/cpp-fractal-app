@@ -504,6 +504,11 @@ int main() {
                     }
                 } else if (event.key.code == sf::Keyboard::Num1) {
                     currentFractal = MADELBROT;
+                    // Reset view to initial defaults when switching fractal
+                    realMin = INIT_REAL_MIN;
+                    realMax = INIT_REAL_MAX;
+                    imagMin = INIT_IMAG_MIN;
+                    imagMax = INIT_IMAG_MAX;
                     renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
                     texture.update(image);
                     // mark dirty and debounce save for fractal change
@@ -512,24 +517,44 @@ int main() {
                     image.saveToFile("C:/_AI/002/debug_fractal_1.png");
                 } else if (event.key.code == sf::Keyboard::Num2) {
                     currentFractal = SIERPINSKI;
+                    // Reset view to initial defaults when switching fractal
+                    realMin = INIT_REAL_MIN;
+                    realMax = INIT_REAL_MAX;
+                    imagMin = INIT_IMAG_MIN;
+                    imagMax = INIT_IMAG_MAX;
                     renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
                     texture.update(image);
                     viewDirty = true; saveClock.restart();
                     image.saveToFile("C:/_AI/002/debug_fractal_2.png");
                 } else if (event.key.code == sf::Keyboard::Num3) {
                     currentFractal = KOCH;
+                    // Reset view to initial defaults when switching fractal
+                    realMin = INIT_REAL_MIN;
+                    realMax = INIT_REAL_MAX;
+                    imagMin = INIT_IMAG_MIN;
+                    imagMax = INIT_IMAG_MAX;
                     renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
                     texture.update(image);
                     viewDirty = true; saveClock.restart();
                     image.saveToFile("C:/_AI/002/debug_fractal_3.png");
                 } else if (event.key.code == sf::Keyboard::Num4) {
                     currentFractal = MENGER;
+                    // Reset view to initial defaults when switching fractal
+                    realMin = INIT_REAL_MIN;
+                    realMax = INIT_REAL_MAX;
+                    imagMin = INIT_IMAG_MIN;
+                    imagMax = INIT_IMAG_MAX;
                     renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
                     texture.update(image);
                     viewDirty = true; saveClock.restart();
                     image.saveToFile("C:/_AI/002/debug_fractal_4.png");
                 } else if (event.key.code == sf::Keyboard::Num5) {
                     currentFractal = DRAGON;
+                    // Reset view to initial defaults when switching fractal
+                    realMin = INIT_REAL_MIN;
+                    realMax = INIT_REAL_MAX;
+                    imagMin = INIT_IMAG_MIN;
+                    imagMax = INIT_IMAG_MAX;
                     renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
                     texture.update(image);
                     viewDirty = true; saveClock.restart();
