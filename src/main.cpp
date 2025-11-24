@@ -401,6 +401,22 @@ int main() {
         overlay.setOutlineThickness(1.0f);
         overlay.setPosition(8.f, 8.f);
     }
+    // Animated zoom state: interpolate bounds over time for smooth zooming
+    struct ZoomAnim {
+        bool active = false;
+        float duration = 0.2f; // seconds
+        sf::Clock clock;
+        double startRealMin = 0.0, startRealMax = 0.0, startImagMin = 0.0, startImagMax = 0.0;
+        double targetRealMin = 0.0, targetRealMax = 0.0, targetImagMin = 0.0, targetImagMax = 0.0;
+        void start(double srm, double srx, double sim, double six,
+                   double trm, double trx, double tim, double tix,
+                   float dur) {
+            startRealMin = srm; startRealMax = srx; startImagMin = sim; startImagMax = six;
+            targetRealMin = trm; targetRealMax = trx; targetImagMin = tim; targetImagMax = tix;
+            duration = dur; clock.restart(); active = true;
+        }
+        float progress() const { return std::min(1.0f, clock.getElapsedTime().asSeconds() / duration); }
+    } zoomAnim;
     
     // Main loop
     while (window.isOpen()) {
@@ -464,22 +480,28 @@ int main() {
                     int my = static_cast<int>(event.mouseWheelScroll.y);
 
                     // Compute zoom factor from delta; using a smooth exponential scale
-                    double zoomFactor = std::pow(0.98, delta);
+                    double wheelZoomFactor = std::pow(0.98, delta);
 
                     // Map the pixel under the cursor to complex coordinates
                     double clickR = pixelToReal(mx, WIDTH, realMin, realMax);
                     double clickI = pixelToImag(my, HEIGHT, imagMin, imagMax);
 
-                    // Scale bounds around the clicked complex point
-                    realMin = clickR + (realMin - clickR) * zoomFactor;
-                    realMax = clickR + (realMax - clickR) * zoomFactor;
-                    imagMin = clickI + (imagMin - clickI) * zoomFactor;
-                    imagMax = clickI + (imagMax - clickI) * zoomFactor;
+                    // Compute target bounds (zoom around clicked complex point)
+                    double trgRealMin = clickR + (realMin - clickR) * wheelZoomFactor;
+                    double trgRealMax = clickR + (realMax - clickR) * wheelZoomFactor;
+                    // Keep aspect ratio by calculating half-height from target real width
+                    double trgWidth = trgRealMax - trgRealMin;
+                    double trgHalfH = trgWidth * (static_cast<double>(HEIGHT) / static_cast<double>(WIDTH)) / 2.0;
+                    double trgCenterI = clickI;
+                    double trgImagMin = trgCenterI - trgHalfH;
+                    double trgImagMax = trgCenterI + trgHalfH;
 
-                    renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
-                    texture.update(image);
-
-                    // mark dirty for debounced save
+                    // Start an animated transition for smooth zoom (duration tuned by delta)
+                    float dur = std::min(0.3f, std::max(0.06f, 0.08f * std::abs(delta)));
+                    zoomAnim.start(realMin, realMax, imagMin, imagMax,
+                                   trgRealMin, trgRealMax, trgImagMin, trgImagMax,
+                                   dur);
+                    // mark dirty so we persist after animation completes
                     viewDirty = true; saveClock.restart();
                 }
             }
@@ -585,30 +607,29 @@ int main() {
         // continuous zoom timer: apply zoom every 50ms while key is held
         static sf::Clock zoomClock;
         const float zoomIntervalSec = 0.05f; // 50 ms
-            if ((zoomInPressed || zoomOutPressed) && zoomClock.getElapsedTime().asSeconds() >= zoomIntervalSec) {
-            double zoomFactor = 1.0;
-            if (zoomInPressed && !zoomOutPressed) zoomFactor = 0.98; // zoom in 2%
-            else if (zoomOutPressed && !zoomInPressed) zoomFactor = 1.02; // zoom out 2%
+        if ((zoomInPressed || zoomOutPressed) && zoomClock.getElapsedTime().asSeconds() >= zoomIntervalSec) {
+            // When the user holds zoom keys, kick off short animated zoom steps
+            if (!zoomAnim.active) {
+                double zoomFactor = 1.0;
+                if (zoomInPressed && !zoomOutPressed) zoomFactor = 0.98; // zoom in 2%
+                else if (zoomOutPressed && !zoomInPressed) zoomFactor = 1.02; // zoom out 2%
 
-            // Center stays the same (current center)
-            double centerReal = (realMin + realMax) / 2.0;
-            double centerImag = (imagMin + imagMax) / 2.0;
+                double centerReal = (realMin + realMax) / 2.0;
+                double centerImag = (imagMin + imagMax) / 2.0;
+                double trgRealMin = centerReal - (centerReal - realMin) * zoomFactor;
+                double trgRealMax = centerReal + (realMax - centerReal) * zoomFactor;
+                double trgWidth = trgRealMax - trgRealMin;
+                double trgHalfH = trgWidth * (static_cast<double>(HEIGHT) / static_cast<double>(WIDTH)) / 2.0;
+                double trgImagMin = centerImag - trgHalfH;
+                double trgImagMax = centerImag + trgHalfH;
 
-            double halfWidth = (realMax - realMin) / 2.0 * zoomFactor;
-            double halfHeight = (imagMax - imagMin) / 2.0 * zoomFactor;
-
-            realMin = centerReal - halfWidth;
-            realMax = centerReal + halfWidth;
-            imagMin = centerImag - halfHeight;
-            imagMax = centerImag + halfHeight;
-
-            renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
-            texture.update(image);
-
-            // debounce zoomed state save
-            viewDirty = true;
-            saveClock.restart();
-
+                // short duration for smooth continuous feel
+                zoomAnim.start(realMin, realMax, imagMin, imagMax,
+                               trgRealMin, trgRealMax, trgImagMin, trgImagMax,
+                               0.06f);
+                // mark dirty; save after animation
+                viewDirty = true; saveClock.restart();
+            }
             zoomClock.restart();
         }
 
@@ -636,6 +657,40 @@ int main() {
             else if (currentFractal == DRAGON) name = "Dragon";
             oss << "Fractal: " << name;
             overlay.setString(oss.str());
+        }
+
+        // If an animated zoom is active, step it and render the intermediate view
+        if (zoomAnim.active) {
+            float p = zoomAnim.progress();
+            // interpolate center linearly, interpolate width exponentially for natural zoom
+            double startW = zoomAnim.startRealMax - zoomAnim.startRealMin;
+            double targetW = zoomAnim.targetRealMax - zoomAnim.targetRealMin;
+            double curW = 0.0;
+            if (startW > 0.0 && targetW > 0.0) curW = startW * std::pow(targetW / startW, p);
+            else curW = zoomAnim.startRealMax + (zoomAnim.targetRealMax - zoomAnim.startRealMax) * p;
+
+            double startCenterR = (zoomAnim.startRealMin + zoomAnim.startRealMax) / 2.0;
+            double targetCenterR = (zoomAnim.targetRealMin + zoomAnim.targetRealMax) / 2.0;
+            double centerR = startCenterR + (targetCenterR - startCenterR) * p;
+
+            double startCenterI = (zoomAnim.startImagMin + zoomAnim.startImagMax) / 2.0;
+            double targetCenterI = (zoomAnim.targetImagMin + zoomAnim.targetImagMax) / 2.0;
+            double centerI = startCenterI + (targetCenterI - startCenterI) * p;
+
+            double halfW = curW / 2.0;
+            double halfH = curW * (static_cast<double>(HEIGHT) / static_cast<double>(WIDTH)) / 2.0;
+
+            realMin = centerR - halfW;
+            realMax = centerR + halfW;
+            imagMin = centerI - halfH;
+            imagMax = centerI + halfH;
+
+            renderCurrent(currentFractal, image, WIDTH, HEIGHT, realMin, realMax, imagMin, imagMax, MAX_ITER);
+            texture.update(image);
+
+            if (p >= 1.0f) {
+                zoomAnim.active = false;
+            }
         }
 
         window.clear();
